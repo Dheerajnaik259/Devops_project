@@ -4,7 +4,7 @@ FROM node:20-alpine AS builder
 WORKDIR /app
 
 COPY app/package*.json ./
-RUN npm ci --only=production
+RUN npm install --only=production
 
 # ---- Production Stage ----
 FROM node:20-alpine
