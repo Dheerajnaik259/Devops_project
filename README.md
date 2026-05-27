@@ -1,6 +1,6 @@
-# 🚀 CI/CD Pipeline — GitHub Actions + GCP VM (GHCR)
+# 🚀 CI/CD Pipeline — GitHub Actions + Render + Telegram
 
-A production-grade CI/CD pipeline that automatically tests, builds, containerizes, and deploys a Node.js web app to a Google Cloud Platform (GCP) VM instance via GitHub Container Registry (GHCR) on every push to `main`.
+A production-grade CI/CD pipeline that automatically tests, builds, containerizes, and deploys a Node.js web app to Render on every push to `main` — with Telegram notifications on every deploy.
 
 ---
 
@@ -10,33 +10,28 @@ A production-grade CI/CD pipeline that automatically tests, builds, containerize
 Developer pushes to main
          │
          ▼
-┌─────────────────────┐
-│  GitHub Actions      │
-│                      │
-│  ① Run Tests         │
-│  ② Build Docker Image│
-│  ③ Push to GitHub    │
-│     Container        │
-│     Registry (GHCR)  │
-│  ④ SSH into GCP VM   │
-│     & Pull/Restart   │
-│  ⑤ Telegram Notify   │
-└─────────────────────┘
+┌─────────────────────────┐
+│     GitHub Actions       │
+│                          │
+│  ① Run Tests (Jest)      │
+│  ② Deploy to Render      │
+│  ③ Telegram Notification │
+└─────────────────────────┘
          │
          ▼
-┌─────────────────────┐
-│  GCP Compute Engine  │
-│  VM Instance         │
-└─────────────────────┘
+┌─────────────────────────┐
+│  Render (Docker)         │
+│  Live Public URL         │
+└─────────────────────────┘
          │
          ▼
-┌─────────────────────┐
-│  Telegram Bot        │
-│  Deploy Notification │
-└─────────────────────┘
+┌─────────────────────────┐
+│  Telegram Bot            │
+│  Deploy Notification     │
+└─────────────────────────┘
 ```
 
-**Stack:** Node.js · Docker · GitHub Actions · GitHub Container Registry (GHCR) · GCP Compute Engine (VM) · Telegram Bot API
+**Stack:** Node.js · Express · Docker · GitHub Actions · Render · Telegram Bot API
 
 ---
 
@@ -45,12 +40,10 @@ Developer pushes to main
 | Stage | Trigger | Description |
 |-------|---------|-------------|
 | ✅ **Test** | Every push & PR | Runs Jest unit tests |
-| 🐳 **Build** | Push to `main` only | Builds Docker image |
-| 📦 **Push** | Push to `main` only | Pushes image to GitHub Container Registry (ghcr.io) |
-| 🚀 **Deploy** | Push to `main` only | SSHs into GCP VM, pulls the latest image, and restarts the container |
-| 📬 **Notify** | After deploy | Sends Telegram message with deploy status and VM URL |
+| 🚀 **Deploy** | Push to `main` only | Triggers Render deploy via webhook |
+| 📬 **Notify** | After every deploy | Sends Telegram message with status |
 
-> PRs only trigger tests — no accidental deploys from feature branches.
+> Pull requests only trigger tests — no accidental deploys from feature branches.
 
 ---
 
@@ -58,10 +51,8 @@ Developer pushes to main
 
 | Secret | Description |
 |--------|-------------|
-| `GCP_VM_HOST` | The public IP address or DNS domain of your GCP VM |
-| `GCP_VM_USER` | The username used to SSH into the VM (e.g. `ubuntu`) |
-| `GCP_VM_SSH_KEY` | Private SSH key (PEM/OpenSSH format) used to authenticate |
-| `TELEGRAM_BOT_TOKEN` | Your Telegram bot token |
+| `RENDER_DEPLOY_HOOK` | Render deploy hook URL (Settings → Deploy Hook) |
+| `TELEGRAM_BOT_TOKEN` | Your Telegram bot token from BotFather |
 | `TELEGRAM_CHAT_ID` | Your Telegram chat ID |
 
 ---
@@ -71,8 +62,8 @@ Developer pushes to main
 ```
 cicd-gcp-pipeline/
 ├── app/
-│   ├── index.js          # Express web app
-│   ├── index.test.js     # Jest tests
+│   ├── index.js          # Express web app (/ and /health endpoints)
+│   ├── index.test.js     # Jest unit tests
 │   └── package.json
 ├── .github/
 │   └── workflows/
@@ -84,50 +75,82 @@ cicd-gcp-pipeline/
 
 ---
 
+## 🌐 Live Demo
+
+**URL:** https://devops-project-og10.onrender.com
+
+Sample response:
+```json
+{
+  "status": "ok",
+  "message": "CI/CD Pipeline on GCP 🚀",
+  "version": "1.0.0",
+  "timestamp": "2026-05-27T07:09:55.049Z"
+}
+```
+
+Health check:
+```json
+{ "status": "healthy" }
+```
+
+---
+
 ## 🚀 Getting Started
 
-### Prerequisites
-- GCP Compute Engine VM instance
-- GitHub repository
-- Telegram bot token
+### 1. Clone the repo
+```bash
+git clone https://github.com/Dheerajnaik259/Devops_project.git
+cd Devops_project
+```
 
-### GCP VM Setup
+### 2. Run locally
+```bash
+cd app
+npm install
+npm start
+# Visit http://localhost:8080
+```
 
-1. **Create VM Instance**:
-   Create a standard VM Instance (e.g., `e2-micro` or `e2-medium`) on Google Compute Engine with Ubuntu or a similar Linux distribution.
+### 3. Run tests
+```bash
+cd app
+npm test
+```
 
-2. **Install Docker**:
-   SSH into your VM and install Docker:
-   ```bash
-   sudo apt-get update
-   sudo apt-get install -y docker.io
-   sudo systemctl start docker
-   sudo systemctl enable docker
-   # Add your ssh user to the docker group so sudo is not needed
-   sudo usermod -aG docker $USER
-   ```
-   *Note: Log out and log back in to apply group changes.*
+### 4. Deploy your own
+1. Fork this repo
+2. Create a Web Service on [Render](https://render.com) connected to your fork
+3. Add the 3 GitHub secrets listed above
+4. Push to `main` — pipeline runs automatically
 
-3. **Configure Firewall**:
-   Ensure that HTTP traffic (port 80) is allowed to your VM instance in GCP firewall settings.
+---
 
-4. **Add SSH Keys**:
-   Add your public SSH key to the GCP VM metadata or `~/.ssh/authorized_keys`, and store the private SSH key in GitHub Secrets as `GCP_VM_SSH_KEY`.
+## 🧪 Test the Pipeline
+
+Make any change and push:
+```bash
+git add .
+git commit -m "feat: trigger pipeline"
+git push origin main
+```
+
+Watch it run: **GitHub repo → Actions tab**
 
 ---
 
 ## 💡 Why I Built This
 
-Automates the full software delivery lifecycle — from code push to live deployment — with zero manual steps. Demonstrates real-world DevOps skills: containerization, cloud-native deployment, secrets management, and multi-job pipeline orchestration.
+Manual deployments are slow and error-prone. This pipeline automates the full delivery lifecycle — from code push to live deployment — in under 30 seconds, with zero manual steps. Demonstrates real-world DevOps skills: containerization, CI/CD automation, secrets management, and multi-job pipeline orchestration.
 
 ---
 
 ## 🛠️ Future Improvements
 
-- [ ] Staging environment with manual approval gate before production
-- [ ] Automated rollback on failed health check
-- [ ] Slack notification in addition to Telegram
+- [ ] Add staging environment with manual approval gate
 - [ ] Docker image vulnerability scanning with Trivy
+- [ ] Slack notifications in addition to Telegram
+- [ ] Automated rollback on failed health check
 - [ ] Infrastructure as Code with Terraform
 
 ---
