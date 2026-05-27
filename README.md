@@ -1,6 +1,6 @@
-# 🚀 CI/CD Pipeline — GitHub Actions + GCP Cloud Run
+# 🚀 CI/CD Pipeline — GitHub Actions + GCP VM (GHCR)
 
-A production-grade CI/CD pipeline that automatically tests, builds, containerizes, and deploys a Node.js web app to Google Cloud Run on every push to `main`.
+A production-grade CI/CD pipeline that automatically tests, builds, containerizes, and deploys a Node.js web app to a Google Cloud Platform (GCP) VM instance via GitHub Container Registry (GHCR) on every push to `main`.
 
 ---
 
@@ -15,17 +15,18 @@ Developer pushes to main
 │                      │
 │  ① Run Tests         │
 │  ② Build Docker Image│
-│  ③ Push to Artifact  │
-│     Registry (GCP)   │
-│  ④ Deploy to         │
-│     Cloud Run (GCP)  │
+│  ③ Push to GitHub    │
+│     Container        │
+│     Registry (GHCR)  │
+│  ④ SSH into GCP VM   │
+│     & Pull/Restart   │
 │  ⑤ Telegram Notify   │
 └─────────────────────┘
          │
          ▼
 ┌─────────────────────┐
-│  Cloud Run           │
-│  (Live URL)          │
+│  GCP Compute Engine  │
+│  VM Instance         │
 └─────────────────────┘
          │
          ▼
@@ -35,7 +36,7 @@ Developer pushes to main
 └─────────────────────┘
 ```
 
-**Stack:** Node.js · Docker · GitHub Actions · GCP Artifact Registry · GCP Cloud Run · Telegram Bot API
+**Stack:** Node.js · Docker · GitHub Actions · GitHub Container Registry (GHCR) · GCP Compute Engine (VM) · Telegram Bot API
 
 ---
 
@@ -45,9 +46,9 @@ Developer pushes to main
 |-------|---------|-------------|
 | ✅ **Test** | Every push & PR | Runs Jest unit tests |
 | 🐳 **Build** | Push to `main` only | Builds Docker image |
-| 📦 **Push** | Push to `main` only | Pushes image to GCP Artifact Registry |
-| 🚀 **Deploy** | Push to `main` only | Deploys to Cloud Run (zero-downtime) |
-| 📬 **Notify** | After deploy | Sends Telegram message with deploy status |
+| 📦 **Push** | Push to `main` only | Pushes image to GitHub Container Registry (ghcr.io) |
+| 🚀 **Deploy** | Push to `main` only | SSHs into GCP VM, pulls the latest image, and restarts the container |
+| 📬 **Notify** | After deploy | Sends Telegram message with deploy status and VM URL |
 
 > PRs only trigger tests — no accidental deploys from feature branches.
 
@@ -57,8 +58,9 @@ Developer pushes to main
 
 | Secret | Description |
 |--------|-------------|
-| `GCP_PROJECT_ID` | Your GCP project ID |
-| `GCP_SA_KEY` | GCP Service Account JSON key (base64) |
+| `GCP_VM_HOST` | The public IP address or DNS domain of your GCP VM |
+| `GCP_VM_USER` | The username used to SSH into the VM (e.g. `ubuntu`) |
+| `GCP_VM_SSH_KEY` | Private SSH key (PEM/OpenSSH format) used to authenticate |
 | `TELEGRAM_BOT_TOKEN` | Your Telegram bot token |
 | `TELEGRAM_CHAT_ID` | Your Telegram chat ID |
 
@@ -85,47 +87,32 @@ cicd-gcp-pipeline/
 ## 🚀 Getting Started
 
 ### Prerequisites
-- GCP account with billing enabled
+- GCP Compute Engine VM instance
 - GitHub repository
 - Telegram bot token
 
-### GCP Setup
+### GCP VM Setup
 
-```bash
-# 1. Enable required APIs
-gcloud services enable \
-  artifactregistry.googleapis.com \
-  run.googleapis.com \
-  cloudbuild.googleapis.com
+1. **Create VM Instance**:
+   Create a standard VM Instance (e.g., `e2-micro` or `e2-medium`) on Google Compute Engine with Ubuntu or a similar Linux distribution.
 
-# 2. Create Artifact Registry repository
-gcloud artifacts repositories create cicd-repo \
-  --repository-format=docker \
-  --location=us-central1
+2. **Install Docker**:
+   SSH into your VM and install Docker:
+   ```bash
+   sudo apt-get update
+   sudo apt-get install -y docker.io
+   sudo systemctl start docker
+   sudo systemctl enable docker
+   # Add your ssh user to the docker group so sudo is not needed
+   sudo usermod -aG docker $USER
+   ```
+   *Note: Log out and log back in to apply group changes.*
 
-# 3. Create Service Account
-gcloud iam service-accounts create github-actions-sa \
-  --display-name="GitHub Actions SA"
+3. **Configure Firewall**:
+   Ensure that HTTP traffic (port 80) is allowed to your VM instance in GCP firewall settings.
 
-# 4. Grant required roles
-gcloud projects add-iam-policy-binding YOUR_PROJECT_ID \
-  --member="serviceAccount:github-actions-sa@YOUR_PROJECT_ID.iam.gserviceaccount.com" \
-  --role="roles/artifactregistry.writer"
-
-gcloud projects add-iam-policy-binding YOUR_PROJECT_ID \
-  --member="serviceAccount:github-actions-sa@YOUR_PROJECT_ID.iam.gserviceaccount.com" \
-  --role="roles/run.admin"
-
-gcloud projects add-iam-policy-binding YOUR_PROJECT_ID \
-  --member="serviceAccount:github-actions-sa@YOUR_PROJECT_ID.iam.gserviceaccount.com" \
-  --role="roles/iam.serviceAccountUser"
-
-# 5. Create and download key
-gcloud iam service-accounts keys create key.json \
-  --iam-account=github-actions-sa@YOUR_PROJECT_ID.iam.gserviceaccount.com
-```
-
-Add the contents of `key.json` as the `GCP_SA_KEY` secret in GitHub (Settings → Secrets).
+4. **Add SSH Keys**:
+   Add your public SSH key to the GCP VM metadata or `~/.ssh/authorized_keys`, and store the private SSH key in GitHub Secrets as `GCP_VM_SSH_KEY`.
 
 ---
 
