@@ -66,13 +66,15 @@ jobs:
             STATUS_TEXT="Deployment Failed"
           fi
           MESSAGE="$EMOJI $STATUS_TEXT
-Repo: $REPO
-Branch: $BRANCH
+Repo: $REPO | Branch: $BRANCH
 Commit: $SHORT_SHA - $COMMIT_MSG
 Author: $AUTHOR
-Tests: $TEST_STATUS
-Deploy: $DEPLOY_STATUS
+Tests: $TEST_STATUS | Deploy: $DEPLOY_STATUS
 URL: https://devops-project-og10.onrender.com"
-          curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
-            -H "Content-Type: application/json" \
-            -d "{\"chat_id\": \"${TELEGRAM_CHAT_ID}\", \"text\": \"${MESSAGE}\"}"
+          python3 -c "
+import urllib.request, json, os
+data = json.dumps({'chat_id': os.environ['TELEGRAM_CHAT_ID'], 'text': os.environ['MESSAGE']}).encode()
+req = urllib.request.Request('https://api.telegram.org/bot' + os.environ['TELEGRAM_BOT_TOKEN'] + '/sendMessage', data=data, headers={'Content-Type': 'application/json'})
+urllib.request.urlopen(req)
+print('Telegram notification sent')
+" MESSAGE="$MESSAGE"
