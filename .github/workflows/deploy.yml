@@ -7,16 +7,11 @@ on:
     branches: [main]
 
 jobs:
-  # ─────────────────────────────────────────
-  # JOB 1: Run Tests
-  # ─────────────────────────────────────────
   test:
-    name: ✅ Run Tests
+    name: Run Tests
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -33,43 +28,36 @@ jobs:
         run: npm test
         working-directory: app
 
-  # ─────────────────────────────────────────
-  # JOB 2: Deploy to Render
-  # ─────────────────────────────────────────
   deploy:
-    name: 🚀 Deploy to Render
+    name: Deploy to Render
     runs-on: ubuntu-latest
     needs: test
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-
     steps:
       - name: Trigger Render Deploy
         run: |
           curl -s -X GET "${{ secrets.RENDER_DEPLOY_HOOK }}" \
             -w "\nHTTP Status: %{http_code}"
 
-  # ─────────────────────────────────────────
-  # JOB 3: Telegram Notification
-  # ─────────────────────────────────────────
   notify:
-    name: 📬 Notify via Telegram
+    name: Notify via Telegram
     runs-on: ubuntu-latest
     needs: [test, deploy]
     if: always() && github.ref == 'refs/heads/main' && github.event_name == 'push'
-
     steps:
       - name: Send Telegram notification
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          DEPLOY_STATUS: ${{ needs.deploy.result }}
+          TEST_STATUS: ${{ needs.test.result }}
+          REPO: ${{ github.repository }}
+          BRANCH: ${{ github.ref_name }}
+          AUTHOR: ${{ github.event.head_commit.author.name }}
+          COMMIT_MSG: ${{ github.event.head_commit.message }}
+          SHA: ${{ github.sha }}
         run: |
-          DEPLOY_STATUS="${{ needs.deploy.result }}"
-          TEST_STATUS="${{ needs.test.result }}"
-          COMMIT_MSG=$(echo "${{ github.event.head_commit.message }}" | head -1)
-          AUTHOR="${{ github.event.head_commit.author.name }}"
-          SHORT_SHA="${{ github.sha }}"
-          SHORT_SHA="${SHORT_SHA:0:7}"
-
+          SHORT_SHA="${SHA:0:7}"
           if [ "$DEPLOY_STATUS" = "success" ]; then
             EMOJI="✅"
             STATUS_TEXT="Deployment Successful"
@@ -77,21 +65,14 @@ jobs:
             EMOJI="❌"
             STATUS_TEXT="Deployment Failed"
           fi
-
-          MESSAGE="${EMOJI} *${STATUS_TEXT}*
-
-🔀 *Repo:* \`${{ github.repository }}\`
-🌿 *Branch:* \`${{ github.ref_name }}\`
-📝 *Commit:* \`${SHORT_SHA}\` — ${COMMIT_MSG}
-👤 *Author:* ${AUTHOR}
-🧪 *Tests:* ${TEST_STATUS}
-🚀 *Deploy:* ${DEPLOY_STATUS}
-🔗 *URL:* https://devops-project-og10.onrender.com"
-
+          MESSAGE="$EMOJI $STATUS_TEXT
+Repo: $REPO
+Branch: $BRANCH
+Commit: $SHORT_SHA - $COMMIT_MSG
+Author: $AUTHOR
+Tests: $TEST_STATUS
+Deploy: $DEPLOY_STATUS
+URL: https://devops-project-og10.onrender.com"
           curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
             -H "Content-Type: application/json" \
-            -d "{
-              \"chat_id\": \"${TELEGRAM_CHAT_ID}\",
-              \"text\": \"${MESSAGE}\",
-              \"parse_mode\": \"Markdown\"
-            }"
+            -d "{\"chat_id\": \"${TELEGRAM_CHAT_ID}\", \"text\": \"${MESSAGE}\"}"
